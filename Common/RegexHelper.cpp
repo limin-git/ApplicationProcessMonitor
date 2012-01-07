@@ -73,4 +73,3 @@ bool RegexHelper::regex_replace_first_only( std::string& s, const boost::regex& 
 }
 
 
-

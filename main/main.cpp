@@ -182,7 +182,7 @@ void monitor_process()
 
             if ( replace_length != 0 )
             {
-                actual_command_line.replace( 0, replace_length, replace_string ); 
+                actual_command_line.replace( 0, replace_length, replace_string );
                 boost::trim( actual_command_line );
 
                 if ( CONFIG_KEY_START == to_replace_string )

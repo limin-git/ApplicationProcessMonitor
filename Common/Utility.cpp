@@ -94,19 +94,23 @@ std::vector<std::string> Utility::get_process_list()
 
 std::map<std::string, bool> Utility::get_service_list()
 {
+    FUNCTION_ENTRY( "get_service_list" );
+
     std::map<std::string, bool> service_list;
 
     SC_HANDLE schSCManager;
 
-    // Open a handle to the SC Manager database. 
+    // Open a handle to the SC Manager database.
 
-    schSCManager = OpenSCManager( NULL,                    // local machine 
-                                  NULL,                    // ServicesActive database 
-                                  SC_MANAGER_ALL_ACCESS);  // full access rights 
+    schSCManager = OpenSCManager( NULL,                    // local machine
+                                  NULL,                    // ServicesActive database
+                                  SC_MANAGER_ALL_ACCESS);  // full access rights
 
-    if (NULL == schSCManager) 
+    if ( NULL == schSCManager )
     {
         printf("OpenSCManager failed (%d)\n", GetLastError());
+
+        FUNCTION_EXIT;
         return service_list;
     }
 
@@ -126,7 +130,7 @@ std::map<std::string, bool> Utility::get_service_list()
                                       &n,
                                       &nResumeHandle ) )
     {
-
+        FUNCTION_EXIT;
         return service_list;
     }
 
@@ -135,12 +139,13 @@ std::map<std::string, bool> Utility::get_service_list()
         std::string service_name = lpServices[i].lpServiceName;
 
         boost::to_lower( service_name );
-        
+
         bool is_service_running = ( lpServices[i].ServiceStatus.dwCurrentState != SERVICE_STOPPED );
 
         service_list[ service_name ] = is_service_running;
     }
 
-
+    FUNCTION_EXIT;
     return service_list;
 }
+

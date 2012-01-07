@@ -116,6 +116,7 @@ void Configuration::parse_ini_file( const std::string& ini_file_name, SectionMap
     FUNCTION_EXIT;
 }
 
+
 const std::string& Configuration::get_configuration( const std::string& section, const std::string& key ) const
 {
     FUNCTION_ENTRY( "get_configuration" );
@@ -161,5 +162,8 @@ const KeyValueMap& Configuration::get_configuration( const std::string& section 
 
 const SectionMap& Configuration::get_configuration() const
 {
+    FUNCTION_ENTRY( "get_configuration" );
+    FUNCTION_EXIT;
     return m_section_map;
 }
+
