@@ -1,0 +1,5 @@
+/.parasoft.dat/
+*.ncb
+*.sln
+*.user
+*.suo
