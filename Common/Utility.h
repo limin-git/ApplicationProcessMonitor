@@ -12,6 +12,7 @@ public:
     static std::string preferred_path( const std::string& path );
 
     static std::vector<std::string> get_process_list();
+    static std::vector<std::string> get_process_list_2();
     static std::map<std::string, bool> get_service_list();
 
 private:

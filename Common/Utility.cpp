@@ -2,7 +2,8 @@
 #include "Utility.h"
 #include "Configuration.h"
 #include "Console.h"
-#include "psapi.h"
+#include <psapi.h>
+#include <tlhelp32.h>
 
 
 std::string Utility::get_string_from_file( const std::string& file_path )
@@ -150,5 +151,42 @@ std::map<std::string, bool> Utility::get_service_list()
 
     FUNCTION_EXIT;
     return service_list;
+}
+
+
+std::vector<std::string> Utility::get_process_list_2()
+{
+    FUNCTION_ENTRY( "get_process_list_2" );
+
+    std::vector<std::string> process_list;
+
+    HANDLE hProcessSnap = NULL;
+    PROCESSENTRY32 pe32 = { 0 };
+
+    hProcessSnap = CreateToolhelp32Snapshot( TH32CS_SNAPPROCESS, 0 );
+
+    if ( (HANDLE)-1 == hProcessSnap )
+    {
+        FUNCTION_EXIT;
+        return process_list;
+    }
+
+    pe32.dwSize = sizeof(PROCESSENTRY32);
+
+    if ( Process32First( hProcessSnap, &pe32 ) )
+    {
+        do
+        {
+            std::string exec_file = pe32.szExeFile;
+            boost::to_lower( exec_file );
+            process_list.push_back( exec_file );
+        }
+        while ( Process32Next( hProcessSnap, &pe32 ) );
+    }
+
+    CloseHandle(hProcessSnap);
+
+    FUNCTION_EXIT;
+    return process_list;
 }
 

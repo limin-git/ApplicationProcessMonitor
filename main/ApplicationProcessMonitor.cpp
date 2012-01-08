@@ -70,7 +70,8 @@ void ApplicationProcessMonitor::extract_system_information( std::vector<std::str
 {
     FUNCTION_ENTRY( "extract_system_information" );
 
-    m_process_list = Utility::get_process_list();
+    // m_process_list = Utility::get_process_list();
+    m_process_list = Utility::get_process_list_2();
     m_service_list = Utility::get_service_list();
 
     FUNCTION_EXIT;
