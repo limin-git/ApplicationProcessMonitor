@@ -137,7 +137,7 @@
 				OmitFramePointers="true"
 				EnableFiberSafeOptimizations="true"
 				AdditionalIncludeDirectories="C:\_perforce\COTS\boost\boost_1_39_0;CodeBlock;Command;Common;File;main;Observer;Style;PerformanceTest"
-				PreprocessorDefinitions="WIN32;NDEBUG;_CONSOLE;"
+				PreprocessorDefinitions="WIN32;NDEBUG;_CONSOLE"
 				RuntimeLibrary="2"
 				UsePrecompiledHeader="2"
 				WarningLevel="3"
@@ -252,6 +252,14 @@
 		<Filter
 			Name="main"
 			>
+			<File
+				RelativePath=".\main\ApplicationProcessMonitor.cpp"
+				>
+			</File>
+			<File
+				RelativePath=".\main\ApplicationProcessMonitor.h"
+				>
+			</File>
 			<File
 				RelativePath=".\main\Configuration.cpp"
 				>

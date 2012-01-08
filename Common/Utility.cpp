@@ -42,6 +42,9 @@ std::vector<std::string> Utility::get_process_list()
 {
     FUNCTION_ENTRY( "get_process_list" );
 
+    //TODO:
+    // current version only enumerate processes of current user, and can not enumerate system process
+
     std::vector<std::string> process_list;
 
     DWORD aProcesses[1024], cbNeeded, cProcesses;
