@@ -102,28 +102,23 @@ std::map<std::string, bool> Utility::get_service_list()
 
     std::map<std::string, bool> service_list;
 
-    SC_HANDLE schSCManager;
-
     // Open a handle to the SC Manager database.
-
-    schSCManager = OpenSCManager( NULL,                    // local machine
-                                  NULL,                    // ServicesActive database
-                                  SC_MANAGER_ALL_ACCESS);  // full access rights
+    static SC_HANDLE schSCManager = OpenSCManager( NULL,                    // local machine
+                                                   NULL,                    // ServicesActive database
+                                                   SC_MANAGER_ALL_ACCESS);  // full access rights
 
     if ( NULL == schSCManager )
     {
-        printf("OpenSCManager failed (%d)\n", GetLastError());
+        std::cout << "OpenSCManager failed (" << GetLastError() << ")" << std::endl;
 
         FUNCTION_EXIT;
         return service_list;
     }
 
-    LPENUM_SERVICE_STATUS lpServices = NULL;
+    static LPENUM_SERVICE_STATUS lpServices = (LPENUM_SERVICE_STATUS)LocalAlloc( LPTR, 64 * 1024 );
     DWORD nSize = 0;
     DWORD n;
     DWORD nResumeHandle = 0;
-
-    lpServices = (LPENUM_SERVICE_STATUS)LocalAlloc( LPTR, 64 * 1024 );
 
     if ( false == EnumServicesStatus( schSCManager,
                                       SERVICE_WIN32,
@@ -146,7 +141,7 @@ std::map<std::string, bool> Utility::get_service_list()
 
         bool is_service_running = ( lpServices[i].ServiceStatus.dwCurrentState != SERVICE_STOPPED );
 
-        service_list[ service_name ] = is_service_running;
+        service_list[service_name] = is_service_running;
     }
 
     FUNCTION_EXIT;

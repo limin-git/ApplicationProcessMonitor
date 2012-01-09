@@ -21,9 +21,6 @@ void ApplicationProcessMonitor::run()
 
     while ( true )
     {
-        Sleep( m_interval_in_millisecond );
-        std::cout << "." << std::endl;
-
         extract_system_information( m_process_list, m_service_list );
 
         for ( SectionMap::const_iterator it = m_application_configuration_map.begin(); it != m_application_configuration_map.end(); ++it )
@@ -35,6 +32,9 @@ void ApplicationProcessMonitor::run()
 
             monitor_application( application_name, application_configuration );
         }
+
+        Sleep( m_interval_in_millisecond );
+        std::cout << "." << std::endl;
     }
 
     FUNCTION_EXIT;
