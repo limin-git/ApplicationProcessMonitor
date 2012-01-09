@@ -107,7 +107,7 @@ void Configuration::parse_ini_file( const std::string& ini_file_name, SectionMap
                     this_configuration_strm << " = " << value;
                 }
 
-                section_map[ section ][ key ] = value;
+                section_map[ section ].insert( std::make_pair( key, value ) );
                 this_configuration_strm << std::endl;
             }
         }

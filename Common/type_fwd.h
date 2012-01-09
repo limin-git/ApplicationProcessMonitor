@@ -20,28 +20,18 @@ namespace boost
 
 ////////////////////////[ Macros ]//////////////////////////////////////////////////
 
-typedef std::map< std::string, std::string > KeyValueMap;
+typedef std::multimap< std::string, std::string > KeyValueMap;
 typedef std::string Section;
 typedef std::map< Section, KeyValueMap > SectionMap;
 
 
 #define CONFIG_INI ".\\ApplicationProcessMonitor.ini"
 
-
 #define CONFIG_SECTION_OPTION                                         "Option"
 #define CONFIG_KEY_INTERVAL_IN_SECONDS                                "IntervalInSeconds"
 
-#define CONFIG_SECTION_COMMAND                                        "Command"
-#define CONFIG_KEY_START                                              "start"
-#define CONFIG_KEY_STOP                                               "stop"
-#define CONFIG_KEY_START_SERVICE                                      "start service"
-#define CONFIG_KEY_STOP_SERVICE                                       "stop service"
-
 #define CONFIG_KEY_AFTER_START                                        "After Start"
 #define CONFIG_KEY_AFTER_STOP                                         "After Stop"
-#define CONFIG_KEY_AFTER_START_OR_STOP                                "After Start|Stop"
-#define CONFIG_KEY_START_ALWAYS                                       "Start Always"
-#define CONFIG_KEY_STOP_ALWAYS                                        "Stop Always"
 
 #define FUNCTION_ENTRY(s)
 #define FUNCTION_EXIT

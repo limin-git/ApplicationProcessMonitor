@@ -23,14 +23,14 @@ void ApplicationProcessMonitor::run()
     {
         extract_system_information( m_process_list, m_service_list );
 
-        for ( SectionMap::const_iterator it = m_application_configuration_map.begin(); it != m_application_configuration_map.end(); ++it )
+        for ( std::map< std::string, std::vector<ApplicationConfiguration> >::iterator it = m_application_configuration_map.begin(); it != m_application_configuration_map.end(); ++it )
         {
             std::string application_name = it->first;
             boost::to_lower( application_name );
 
-            const KeyValueMap& application_configuration  = it->second;
+            const std::vector<ApplicationConfiguration>& application_configuration_list  = it->second;
 
-            monitor_application( application_name, application_configuration );
+            monitor_application( application_name, application_configuration_list );
         }
 
         Sleep( m_interval_in_millisecond );
@@ -45,21 +45,170 @@ void ApplicationProcessMonitor::initialize()
 {
     FUNCTION_ENTRY( "initialize" );
 
-    m_application_configuration_map = Configuration::instance().get_configuration();
-    m_application_configuration_map.erase( CONFIG_SECTION_COMMAND );
-    m_application_configuration_map.erase( CONFIG_SECTION_OPTION );
+    m_command_map[ "start" ] = "";
+    m_command_map[ "stop" ] = "kill -f";
+    m_command_map[ "start_service" ] = "sc start";
+    m_command_map[ "stop_service" ] = "sc stop";
 
-    m_command_map = Configuration::instance().get_configuration( CONFIG_SECTION_COMMAND );
+    m_command_type_map[ "start" ] = START;
+    m_command_type_map[ "stop" ] = STOP;
+    m_command_type_map[ "start_service" ] = START_SERVICE;
+    m_command_type_map[ "stop_service" ] = STOP_SERVICE;
 
-    std::string sleep_interval_string = Configuration::instance().get_configuration( CONFIG_SECTION_OPTION, CONFIG_KEY_INTERVAL_IN_SECONDS );
+    m_condition_type_map[ CONFIG_KEY_AFTER_START ] = AFTER_START;
+    m_condition_type_map[ CONFIG_KEY_AFTER_STOP ] = AFTER_STOP;
+    m_condition_type_map[ "*" ] = ANY;
+
+
+    SectionMap section_map = Configuration::instance().get_configuration();
+    section_map.erase( CONFIG_SECTION_OPTION );
+
+    for ( SectionMap::iterator it = section_map.begin(); it != section_map.end(); ++it )
+    {
+        const std::string& application_name = it->first;
+        const KeyValueMap& configuration_map = it->second;
+
+        for ( KeyValueMap::const_iterator key_it = configuration_map.begin(); key_it != configuration_map.end(); ++key_it )
+        {
+            const std::string& condition_type = key_it->first;
+            const std::string& command_line = key_it->second;
+
+            ApplicationConfiguration application_configuration;
+
+            boost::smatch m;
+            static const boost::regex configuration_regex( "(?x) ([\\w]+) \\s+ (.+)" );
+
+            if ( true == regex_match( command_line, m, configuration_regex ) )
+            {
+                std::string command_type = m.str(1);
+                std::string command = m.str(2);
+
+                application_configuration.m_command_type = m_command_type_map[command_type];
+                application_configuration.m_condition_type = m_condition_type_map[condition_type];
+
+                if ( START == application_configuration.m_command_type || STOP == application_configuration.m_command_type )
+                {
+                    std::string the_application;
+                    get_application_name_from_command_line( command, the_application );
+                    boost::to_lower( the_application );
+
+                    application_configuration.m_application_name = the_application;
+                }
+                else if ( START_SERVICE == application_configuration.m_command_type || STOP_SERVICE == application_configuration.m_command_type )
+                {
+                    boost::to_lower( command );
+
+                    application_configuration.m_service_name = command;
+                }
+                else
+                {
+                    NULL;
+                }
+
+                std::stringstream command_strm;
+
+                command_strm << m_command_map[command_type];
+                
+                if ( false == m_command_map[command_type].empty() )
+                {
+                    command_strm << " ";
+                }
+                
+                command_strm << command;
+                application_configuration.m_command_line = command_strm.str();
+                m_application_configuration_map[application_name].push_back( application_configuration );
+            }
+            else
+            {
+                std::cout << "error: bad configuration:" << "application: " << application_name << " condition type:" << condition_type << " command line: " << command_line << std::endl;
+            }
+        }
+    }
 
     try
     {
+        std::string sleep_interval_string = Configuration::instance().get_configuration( CONFIG_SECTION_OPTION, CONFIG_KEY_INTERVAL_IN_SECONDS );
         m_interval_in_millisecond = boost::lexical_cast<unsigned long>( sleep_interval_string ) * 1000;
     }
     catch (const boost::bad_lexical_cast&)
     {
         m_interval_in_millisecond = 60 * 1000;
+    }
+
+    FUNCTION_EXIT;
+}
+
+
+void ApplicationProcessMonitor::monitor_application( const std::string& application_name, const std::vector<ApplicationConfiguration>& application_configuration_list )
+{
+    FUNCTION_ENTRY( "monitor_application" );
+
+    for ( size_t i = 0; i < application_configuration_list.size(); ++i )
+    {
+        const ApplicationConfiguration& application_configuration = application_configuration_list[i];
+
+        if ( "*" != application_name )
+        {
+            bool is_running = is_application_running( application_name );
+
+            if ( ( true == application_configuration.m_command_line.empty() ) ||
+                 ( AFTER_START == application_configuration.m_condition_type && false == is_running ) ||
+                 ( AFTER_STOP == application_configuration.m_condition_type && true == is_running ) )
+            {
+                continue;
+            }
+        }
+
+        if ( START == application_configuration.m_command_type || STOP == application_configuration.m_command_type )
+        {
+            bool is_configuration_application_running = is_application_running( application_configuration.m_application_name );
+
+            if ( ( START == application_configuration.m_command_type && true == is_configuration_application_running ) ||
+                 ( STOP == application_configuration.m_command_type && false == is_configuration_application_running ) )
+            {
+                continue;
+            }
+        }
+        else if ( START_SERVICE == application_configuration.m_command_type || STOP_SERVICE == application_configuration.m_command_type )
+        {
+            bool is_configuration_service_running = is_service_running( application_configuration.m_service_name );
+
+            if ( ( START_SERVICE == application_configuration.m_command_type && true == is_configuration_service_running ) ||
+                 ( STOP_SERVICE == application_configuration.m_command_type && false == is_configuration_service_running ) )
+            {
+                continue;
+            }
+        }
+        else
+        {
+            NULL;
+        }
+
+        unsigned int result = execute_command_line( application_configuration.m_command_line );
+
+        if ( result <= 31 )
+        {
+            if ( 0 == result )
+            {
+                std::cout << "failed to execute command line: " << application_configuration.m_command_line << ", reason: out of memory." << std::endl;
+            }
+            else if ( ERROR_BAD_FORMAT == result )
+            {
+                std::cout << "failed to execute command line: " << application_configuration.m_command_line << ", reason: The .exe file is invalid." << std::endl;
+            }
+            else if ( ERROR_FILE_NOT_FOUND == result )
+            {
+                std::cout << "failed to execute command line: " << application_configuration.m_command_line << ", reason: The specified file was not found." << std::endl;
+            }
+            else if ( ERROR_PATH_NOT_FOUND == result )
+            {
+                std::cout << "failed to execute command line: " << application_configuration.m_command_line << ", reason: The specified path was not found." << std::endl;
+            }
+            else
+            {
+                NULL;
+            }
+        }
     }
 
     FUNCTION_EXIT;
@@ -133,138 +282,6 @@ bool ApplicationProcessMonitor::get_service_name_from_command_line( const std::s
 
     FUNCTION_EXIT;
     return false;
-}
-
-
-void ApplicationProcessMonitor::get_command_name_from_command_line( const std::string& command_line, std::string& command_name )
-{
-    FUNCTION_ENTRY( "get_command_name_from_command_line" );
-
-    command_name.clear();
-
-    for ( KeyValueMap::const_iterator key_it = m_command_map.begin(); key_it != m_command_map.end(); ++key_it )
-    {
-        const std::string& current_command_name = key_it->first;
-
-        std::string::size_type pos = command_line.find( current_command_name );
-
-        if ( 0 == pos )
-        {
-            if ( command_name.size() < current_command_name.size() )
-            {
-                command_name = current_command_name;
-            }
-        }
-    }
-
-    FUNCTION_EXIT;
-}
-
-
-std::string ApplicationProcessMonitor::convert_configuration_command_line_to_actual_command_line( const std::string& configuration_command_line )
-{
-    FUNCTION_ENTRY( "convert_configuration_command_line_to_actual_command_line" );
-
-    std::string command_name;
-    get_command_name_from_command_line( configuration_command_line, command_name );
-
-    if ( true == command_name.empty() )
-    {
-        FUNCTION_EXIT;
-        return "";
-    }
-
-    if ( m_command_map.find( command_name ) == m_command_map.end() )
-    {
-        FUNCTION_EXIT;
-        return "";
-    }
-
-    std::string actual_command_line = configuration_command_line;
-    actual_command_line.replace( 0, command_name.size(), m_command_map[command_name] );
-    boost::trim( actual_command_line );
-
-    FUNCTION_EXIT;
-    return actual_command_line;
-}
-
-
-void ApplicationProcessMonitor::monitor_application( const std::string& application_name, const KeyValueMap& application_configuration )
-{
-    FUNCTION_ENTRY( "monitor_application" );
-
-    bool is_running = is_application_running( application_name );
-
-    for ( KeyValueMap::const_iterator it = application_configuration.begin(); it != application_configuration.end(); ++it )
-    {
-        const std::string& condition_name = it->first;
-        const std::string& configuration_command_line = it->second;
-
-        if ( ( true == configuration_command_line.empty() ) ||
-             ( CONFIG_KEY_AFTER_START == condition_name && false == is_running ) ||
-             ( CONFIG_KEY_AFTER_STOP == condition_name && true == is_running ) )
-        {
-            continue;
-        }
-
-        std::string command_name;
-        get_command_name_from_command_line( configuration_command_line, command_name );
-
-        if ( command_name.empty() )
-        {
-            continue;
-        }
-
-        if ( CONFIG_KEY_START == command_name || CONFIG_KEY_STOP == command_name )
-        {
-            std::string configuration_application_name;
-
-            if ( false == get_application_name_from_command_line( configuration_command_line, configuration_application_name ) )
-            {
-                continue;
-            }
-
-            bool is_configuration_application_running = is_application_running( configuration_application_name );
-
-            if ( ( CONFIG_KEY_START == command_name && true == is_configuration_application_running ) ||
-                 ( CONFIG_KEY_STOP == command_name && false == is_configuration_application_running ) )
-            {
-                continue;
-            }
-        }
-        else if ( CONFIG_KEY_START_SERVICE == command_name || CONFIG_KEY_STOP_SERVICE == command_name )
-        {
-            std::string configuration_service_name;
-
-            if ( false == get_service_name_from_command_line( configuration_command_line, configuration_service_name ) )
-            {
-                continue;
-            }
-
-            bool is_configuration_service_running = is_service_running( configuration_service_name );
-
-            if ( ( CONFIG_KEY_START_SERVICE == command_name && true == is_configuration_service_running ) ||
-                 ( CONFIG_KEY_STOP_SERVICE == command_name && false == is_configuration_service_running ) )
-            {
-                continue;
-            }
-        }
-        else
-        {
-            NULL;
-        }
-
-        std::string actual_command_line = convert_configuration_command_line_to_actual_command_line( configuration_command_line );
-
-        if ( true == actual_command_line.empty() )
-        {
-            continue;
-        }
-
-        execute_command_line( actual_command_line );
-    }
-
-    FUNCTION_EXIT;
 }
 
 

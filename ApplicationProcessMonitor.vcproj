@@ -45,7 +45,7 @@
 				FavorSizeOrSpeed="1"
 				OmitFramePointers="true"
 				WholeProgramOptimization="true"
-				AdditionalIncludeDirectories="C:\_perforce\COTS\boost\boost_1_39_0;Observer;Style;main;File;Common;Command;CodeBlock;PerformanceTest"
+				AdditionalIncludeDirectories="C:\_perforce\COTS\boost\boost_1_39_0;main;Common"
 				PreprocessorDefinitions="WIN32;_DEBUG;_CONSOLE"
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
@@ -201,6 +201,14 @@
 			Name="Common"
 			>
 			<File
+				RelativePath=".\Common\Configuration.cpp"
+				>
+			</File>
+			<File
+				RelativePath=".\Common\Configuration.h"
+				>
+			</File>
+			<File
 				RelativePath=".\Common\RegexHelper.cpp"
 				>
 			</File>
@@ -258,14 +266,6 @@
 			</File>
 			<File
 				RelativePath=".\main\ApplicationProcessMonitor.h"
-				>
-			</File>
-			<File
-				RelativePath=".\main\Configuration.cpp"
-				>
-			</File>
-			<File
-				RelativePath=".\main\Configuration.h"
 				>
 			</File>
 			<File
