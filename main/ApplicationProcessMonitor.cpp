@@ -25,9 +25,7 @@ void ApplicationProcessMonitor::run()
 
         for ( std::map< std::string, std::vector<ApplicationConfiguration> >::iterator it = m_application_configuration_map.begin(); it != m_application_configuration_map.end(); ++it )
         {
-            std::string application_name = it->first;
-            boost::to_lower( application_name );
-
+            const std::string& application_name = it->first;
             const std::vector<ApplicationConfiguration>& application_configuration_list  = it->second;
 
             monitor_application( application_name, application_configuration_list );
@@ -65,7 +63,8 @@ void ApplicationProcessMonitor::initialize()
 
     for ( SectionMap::iterator it = section_map.begin(); it != section_map.end(); ++it )
     {
-        const std::string& application_name = it->first;
+        std::string application_name = it->first;
+        boost::to_lower( application_name );
         const KeyValueMap& configuration_map = it->second;
 
         for ( KeyValueMap::const_iterator key_it = configuration_map.begin(); key_it != configuration_map.end(); ++key_it )
@@ -108,12 +107,12 @@ void ApplicationProcessMonitor::initialize()
                 std::stringstream command_strm;
 
                 command_strm << m_command_map[command_type];
-                
+
                 if ( false == m_command_map[command_type].empty() )
                 {
                     command_strm << " ";
                 }
-                
+
                 command_strm << command;
                 application_configuration.m_command_line = command_strm.str();
                 m_application_configuration_map[application_name].push_back( application_configuration );
