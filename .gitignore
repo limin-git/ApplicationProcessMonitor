@@ -1,4 +1,5 @@
 /.parasoft.dat/
+x64/
 *.ncb
 *.sln
 *.user
