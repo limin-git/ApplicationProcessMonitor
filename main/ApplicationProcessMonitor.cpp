@@ -44,7 +44,7 @@ void ApplicationProcessMonitor::initialize()
     FUNCTION_ENTRY( "initialize" );
 
     m_command_map[ "start" ] = "";
-    m_command_map[ "stop" ] = "kill -f";
+    m_command_map[ "stop" ] = "TASKKILL /F /IM ";
     m_command_map[ "start_service" ] = "sc start";
     m_command_map[ "stop_service" ] = "sc stop";
 
