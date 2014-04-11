@@ -31,8 +31,8 @@ void ApplicationProcessMonitor::run()
             monitor_application( application_name, application_configuration_list );
         }
 
-        Sleep( m_interval_in_millisecond );
-        std::cout << "." << std::endl;
+        ::Sleep( m_interval_in_millisecond );
+        std::cout << "." << std::flush;
     }
 
     FUNCTION_EXIT;
@@ -45,8 +45,8 @@ void ApplicationProcessMonitor::initialize()
 
     m_command_map[ "start" ] = "";
     m_command_map[ "stop" ] = "TASKKILL /F /IM ";
-    m_command_map[ "start_service" ] = "sc start";
-    m_command_map[ "stop_service" ] = "sc stop";
+    m_command_map[ "start_service" ] = "SC START ";
+    m_command_map[ "stop_service" ] = "SC STOP ";
 
     m_command_type_map[ "start" ] = START;
     m_command_type_map[ "stop" ] = STOP;
@@ -57,14 +57,12 @@ void ApplicationProcessMonitor::initialize()
     m_condition_type_map[ CONFIG_KEY_AFTER_STOP ] = AFTER_STOP;
     m_condition_type_map[ "*" ] = ANY;
 
-
     SectionMap section_map = Configuration::instance().get_configuration();
     section_map.erase( CONFIG_SECTION_OPTION );
 
     for ( SectionMap::iterator it = section_map.begin(); it != section_map.end(); ++it )
     {
-        std::string application_name = it->first;
-        boost::to_lower( application_name );
+        const std::string& application_name = boost::to_lower_copy( it->first );
         const KeyValueMap& configuration_map = it->second;
 
         for ( KeyValueMap::const_iterator key_it = configuration_map.begin(); key_it != configuration_map.end(); ++key_it )
@@ -79,42 +77,22 @@ void ApplicationProcessMonitor::initialize()
 
             if ( true == regex_match( command_line, m, configuration_regex ) )
             {
-                std::string command_type = m.str(1);
-                std::string command = m.str(2);
+                const std::string& command_type = m.str(1);
+                const std::string& command = m.str(2);
 
                 application_configuration.m_command_type = m_command_type_map[command_type];
                 application_configuration.m_condition_type = m_condition_type_map[condition_type];
 
                 if ( START == application_configuration.m_command_type || STOP == application_configuration.m_command_type )
                 {
-                    std::string the_application;
-                    get_application_name_from_command_line( command, the_application );
-                    boost::to_lower( the_application );
-
-                    application_configuration.m_application_name = the_application;
+                    application_configuration.m_application_name = get_application_name_from_command_line( command );
                 }
                 else if ( START_SERVICE == application_configuration.m_command_type || STOP_SERVICE == application_configuration.m_command_type )
                 {
-                    boost::to_lower( command );
-
-                    application_configuration.m_service_name = command;
-                }
-                else
-                {
-                    NULL;
+                    application_configuration.m_service_name = boost::to_lower_copy( command );
                 }
 
-                std::stringstream command_strm;
-
-                command_strm << m_command_map[command_type];
-
-                if ( false == m_command_map[command_type].empty() )
-                {
-                    command_strm << " ";
-                }
-
-                command_strm << command;
-                application_configuration.m_command_line = command_strm.str();
+                application_configuration.m_command_line = m_command_map[command_type] + command;
                 m_application_configuration_map[application_name].push_back( application_configuration );
             }
             else
@@ -126,7 +104,7 @@ void ApplicationProcessMonitor::initialize()
 
     try
     {
-        std::string sleep_interval_string = Configuration::instance().get_configuration( CONFIG_SECTION_OPTION, CONFIG_KEY_INTERVAL_IN_SECONDS );
+        const std::string& sleep_interval_string = Configuration::instance().get_configuration( CONFIG_SECTION_OPTION, CONFIG_KEY_INTERVAL_IN_SECONDS );
         m_interval_in_millisecond = boost::lexical_cast<unsigned long>( sleep_interval_string ) * 1000;
     }
     catch (const boost::bad_lexical_cast&)
@@ -178,10 +156,6 @@ void ApplicationProcessMonitor::monitor_application( const std::string& applicat
                 continue;
             }
         }
-        else
-        {
-            NULL;
-        }
 
         unsigned int result = execute_command_line( application_configuration.m_command_line );
 
@@ -203,10 +177,6 @@ void ApplicationProcessMonitor::monitor_application( const std::string& applicat
             {
                 std::cout << "failed to execute command line: " << application_configuration.m_command_line << ", reason: The specified path was not found." << std::endl;
             }
-            else
-            {
-                NULL;
-            }
         }
     }
 
@@ -214,7 +184,7 @@ void ApplicationProcessMonitor::monitor_application( const std::string& applicat
 }
 
 
-void ApplicationProcessMonitor::extract_system_information( std::vector<std::string>& process_list, std::map<std::string, bool>& service_list )
+void ApplicationProcessMonitor::extract_system_information( std::set<std::string>& process_list, std::map<std::string, bool>& service_list )
 {
     FUNCTION_ENTRY( "extract_system_information" );
 
@@ -230,7 +200,7 @@ bool ApplicationProcessMonitor::is_application_running( const std::string& appli
 {
     FUNCTION_ENTRY( "is_application_running" );
     FUNCTION_EXIT;
-    return ( std::find( m_process_list.begin(), m_process_list.end(), application_name ) != m_process_list.end() );
+    return m_process_list.find( application_name ) != m_process_list.end();
 }
 
 
@@ -242,52 +212,21 @@ bool ApplicationProcessMonitor::is_service_running( const std::string& service_n
 }
 
 
-bool ApplicationProcessMonitor::get_application_name_from_command_line( const std::string& command_line, std::string& application_name )
+std::string ApplicationProcessMonitor::get_application_name_from_command_line( const std::string& command_line )
 {
-    FUNCTION_ENTRY( "get_application_name_from_command_line" );
-
-    boost::smatch m;
-    static const boost::regex application_name_regex( "(?xi) \\w+\\.exe" );
-    if ( true == regex_search( command_line, m, application_name_regex ) )
-    {
-        application_name = m.str( 0 );
-
-        boost::to_lower( application_name );
-
-        FUNCTION_EXIT;
-        return true;
-    }
-
-    FUNCTION_EXIT;
-    return false;
-}
-
-
-bool ApplicationProcessMonitor::get_service_name_from_command_line( const std::string& command_line, std::string& service_name )
-{
-    FUNCTION_ENTRY( "get_service_name_from_command_line" );
-
-    boost::smatch m;
-    static const boost::regex application_name_regex( "(?xi) (start [ ] service | stop [ ] service | sc [ ] start | sc [ ] stop) \\s* (\\w+)" );
-    if ( true == regex_search( command_line, m, application_name_regex ) )
-    {
-        service_name = m.str( 2 );
-
-        boost::to_lower( service_name );
-
-        FUNCTION_EXIT;
-        return true;
-    }
-
-    FUNCTION_EXIT;
-    return false;
+    boost::filesystem::path app_path( command_line );
+    std::string application_name = boost::to_lower_copy( app_path.filename().string() );
+    boost::replace_all( application_name, "\"", "" );
+    return application_name;
 }
 
 
 unsigned int ApplicationProcessMonitor::execute_command_line( const std::string& command_line )
 {
     FUNCTION_ENTRY( "execute_command_line" );
-    FUNCTION_EXIT;
-    return WinExec( command_line.c_str(), SW_HIDE );
-}
 
+    Utility::log_to_file( command_line );
+    
+    FUNCTION_EXIT;
+    return ::WinExec( command_line.c_str(), SW_HIDE );
+}

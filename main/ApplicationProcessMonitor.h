@@ -27,18 +27,17 @@ private:
 
     void initialize();
     void monitor_application( const std::string& application_name, const std::vector<ApplicationConfiguration>& application_configuration_list );
-    void extract_system_information( std::vector<std::string>& process_list, std::map<std::string, bool>& service_list );
+    void extract_system_information( std::set<std::string>& process_list, std::map<std::string, bool>& service_list );
     bool is_application_running( const std::string& application_name );
     bool is_service_running( const std::string& service_name );
-    bool get_application_name_from_command_line( const std::string& command_line, std::string& application_name );
-    bool get_service_name_from_command_line( const std::string& command_line, std::string& service_name );
+    std::string get_application_name_from_command_line( const std::string& command_line );
     unsigned int execute_command_line( const std::string& command_line );
 
 private:
 
     unsigned long m_interval_in_millisecond;
 
-    std::vector<std::string>    m_process_list;
+    std::set<std::string>    m_process_list;
     std::map<std::string, bool> m_service_list;
 
     std::map< std::string, std::vector<ApplicationConfiguration> > m_application_configuration_map;
