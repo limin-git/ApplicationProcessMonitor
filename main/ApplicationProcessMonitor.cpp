@@ -134,6 +134,11 @@ void ApplicationProcessMonitor::monitor_application( const std::string& applicat
         }
         else if ( START_SERVICE == application_configuration.m_command_type || STOP_SERVICE == application_configuration.m_command_type )
         {
+            if ( false == is_service_exist( application_configuration.m_service_name ) )
+            {
+                continue;
+            }
+
             bool is_configuration_service_running = is_service_running( application_configuration.m_service_name );
 
             if ( ( START_SERVICE == application_configuration.m_command_type && true == is_configuration_service_running ) ||
@@ -183,7 +188,20 @@ bool ApplicationProcessMonitor::is_application_running( const std::string& appli
 
 bool ApplicationProcessMonitor::is_service_running( const std::string& service_name )
 {
-    return m_service_list[ service_name ];
+    std::map<std::string, bool>::iterator find_it = m_service_list.find( service_name );
+
+    if ( find_it != m_service_list.end() )
+    {
+        return find_it->second;
+    }
+
+    return false;
+}
+
+
+bool ApplicationProcessMonitor::is_service_exist( const std::string& service_name )
+{
+    return ( m_service_list.find( service_name ) != m_service_list.end() );
 }
 
 

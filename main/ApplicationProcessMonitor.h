@@ -28,6 +28,7 @@ private:
     void extract_system_information();
     bool is_application_running( const std::string& application_name );
     bool is_service_running( const std::string& service_name );
+    bool is_service_exist( const std::string& service_name );
     std::string get_application_name_from_command_line( const std::string& command_line );
     unsigned int execute_command_line( const std::string& command_line );
 
