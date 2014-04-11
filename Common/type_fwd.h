@@ -1,6 +1,4 @@
-#if !defined(TYPE_FWD_H)
-#define TYPE_FWD_H
-
+#pragma once
 #include <boost/regex_fwd.hpp>
 #include <boost/unordered/unordered_map_fwd.hpp>
 #include <boost/unordered/unordered_set_fwd.hpp>
@@ -17,13 +15,11 @@ namespace boost
 #include <map>
 #include <iosfwd>
 
-
 ////////////////////////[ Macros ]//////////////////////////////////////////////////
 
 typedef std::multimap< std::string, std::string > KeyValueMap;
 typedef std::string Section;
 typedef std::map< Section, KeyValueMap > SectionMap;
-
 
 #define CONFIG_INI ".\\ApplicationProcessMonitor.ini"
 
@@ -33,10 +29,6 @@ typedef std::map< Section, KeyValueMap > SectionMap;
 #define CONFIG_KEY_AFTER_START                                        "After Start"
 #define CONFIG_KEY_AFTER_STOP                                         "After Stop"
 
-#define FUNCTION_ENTRY(s)
-#define FUNCTION_EXIT
-
-
 #define SourceInfo __FILE__ << ":" << __LINE__ << " "
 #define COUT_ERROR( source_info, msg )      std::cout << source_info << JadedHoboConsole::fg_red << "error:" << JadedHoboConsole::default_color << " " << msg
 #define COUT_WARNING( source_info, msg )    std::cout << source_info << JadedHoboConsole::fg_yellow << "warning:" << JadedHoboConsole::default_color << " " << msg
@@ -45,6 +37,3 @@ typedef std::map< Section, KeyValueMap > SectionMap;
 #define COUT_RED( source_info, msg )        std::cout << JadedHoboConsole::fg_red << msg << JadedHoboConsole::default_color
 #define COUT_BLUE( source_info, msg )       std::cout << JadedHoboConsole::fg_blue << msg << JadedHoboConsole::default_color
 #define COUT_GREEN( source_info, msg )      std::cout << JadedHoboConsole::fg_green << msg << JadedHoboConsole::default_color
-
-
-#endif // TYPE_FWD_H

@@ -1,24 +1,9 @@
-///////////////////////////////////////////////////////////
-//  RegexHelper.h
-//  Implementation of the Class RegexHelper
-//  Created on:     28/05/2008 19:09:48
-//  Original author: limin
-///////////////////////////////////////////////////////////
-
-#if !defined(REGEX_HELPER_H)
-#define REGEX_HELPER_H
-
+#pragma once
 #include "type_fwd.h"
 
 
-/**
- * @author limin
- * @version 1.0
- * @created28/05/2008 19:09:48
- */
 class RegexHelper
 {
-
 public:
 
     static bool regex_remove_all( std::string& s, const boost::regex& e );
@@ -29,7 +14,4 @@ public:
 private:
 
     RegexHelper();
-
 };
-
-#endif // !defined(REGEX_HELPER_H)

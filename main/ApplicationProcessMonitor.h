@@ -1,6 +1,4 @@
-#ifndef APPLICATION_PROCESS_MONITOR_H
-#define APPLICATION_PROCESS_MONITOR_H
-
+#pragma once
 #include "type_fwd.h"
 
 class ApplicationProcessMonitor
@@ -27,7 +25,7 @@ private:
 
     void initialize();
     void monitor_application( const std::string& application_name, const std::vector<ApplicationConfiguration>& application_configuration_list );
-    void extract_system_information( std::set<std::string>& process_list, std::map<std::string, bool>& service_list );
+    void extract_system_information();
     bool is_application_running( const std::string& application_name );
     bool is_service_running( const std::string& service_name );
     std::string get_application_name_from_command_line( const std::string& command_line );
@@ -46,7 +44,4 @@ private:
     std::map<std::string, ECommandType>   m_command_type_map;
     std::map<std::string, EConditionType> m_condition_type_map;
 };
-
-
-#endif //UTILITY_H
 

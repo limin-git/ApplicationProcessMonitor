@@ -7,21 +7,15 @@
 ApplicationProcessMonitor::ApplicationProcessMonitor()
     : m_interval_in_millisecond( 0 )
 {
-    FUNCTION_ENTRY( "ApplicationProcessMonitor" );
-
     initialize();
-
-    FUNCTION_EXIT;
 }
 
 
 void ApplicationProcessMonitor::run()
 {
-    FUNCTION_ENTRY( "run" );
-
     while ( true )
     {
-        extract_system_information( m_process_list, m_service_list );
+        extract_system_information();
 
         for ( std::map< std::string, std::vector<ApplicationConfiguration> >::iterator it = m_application_configuration_map.begin(); it != m_application_configuration_map.end(); ++it )
         {
@@ -34,15 +28,11 @@ void ApplicationProcessMonitor::run()
         ::Sleep( m_interval_in_millisecond );
         std::cout << "." << std::flush;
     }
-
-    FUNCTION_EXIT;
 }
 
 
 void ApplicationProcessMonitor::initialize()
 {
-    FUNCTION_ENTRY( "initialize" );
-
     m_command_map[ "start" ] = "";
     m_command_map[ "stop" ] = "TASKKILL /F /IM ";
     m_command_map[ "start_service" ] = "SC START ";
@@ -57,7 +47,7 @@ void ApplicationProcessMonitor::initialize()
     m_condition_type_map[ CONFIG_KEY_AFTER_STOP ] = AFTER_STOP;
     m_condition_type_map[ "*" ] = ANY;
 
-    SectionMap section_map = Configuration::instance().get_configuration();
+    SectionMap& section_map = Configuration::instance().get_configuration();
     section_map.erase( CONFIG_SECTION_OPTION );
 
     for ( SectionMap::iterator it = section_map.begin(); it != section_map.end(); ++it )
@@ -111,15 +101,11 @@ void ApplicationProcessMonitor::initialize()
     {
         m_interval_in_millisecond = 60 * 1000;
     }
-
-    FUNCTION_EXIT;
 }
 
 
 void ApplicationProcessMonitor::monitor_application( const std::string& application_name, const std::vector<ApplicationConfiguration>& application_configuration_list )
 {
-    FUNCTION_ENTRY( "monitor_application" );
-
     for ( size_t i = 0; i < application_configuration_list.size(); ++i )
     {
         const ApplicationConfiguration& application_configuration = application_configuration_list[i];
@@ -179,35 +165,24 @@ void ApplicationProcessMonitor::monitor_application( const std::string& applicat
             }
         }
     }
-
-    FUNCTION_EXIT;
 }
 
 
-void ApplicationProcessMonitor::extract_system_information( std::set<std::string>& process_list, std::map<std::string, bool>& service_list )
+void ApplicationProcessMonitor::extract_system_information()
 {
-    FUNCTION_ENTRY( "extract_system_information" );
-
-    // m_process_list = Utility::get_process_list();
-    m_process_list = Utility::get_process_list_2();
+    m_process_list = Utility::get_process_list();
     m_service_list = Utility::get_service_list();
-
-    FUNCTION_EXIT;
 }
 
 
 bool ApplicationProcessMonitor::is_application_running( const std::string& application_name )
 {
-    FUNCTION_ENTRY( "is_application_running" );
-    FUNCTION_EXIT;
     return m_process_list.find( application_name ) != m_process_list.end();
 }
 
 
 bool ApplicationProcessMonitor::is_service_running( const std::string& service_name )
 {
-    FUNCTION_ENTRY( "is_service_running" );
-    FUNCTION_EXIT;
     return m_service_list[ service_name ];
 }
 
@@ -223,10 +198,6 @@ std::string ApplicationProcessMonitor::get_application_name_from_command_line( c
 
 unsigned int ApplicationProcessMonitor::execute_command_line( const std::string& command_line )
 {
-    FUNCTION_ENTRY( "execute_command_line" );
-
     Utility::log_to_file( command_line );
-    
-    FUNCTION_EXIT;
     return ::WinExec( command_line.c_str(), SW_HIDE );
 }

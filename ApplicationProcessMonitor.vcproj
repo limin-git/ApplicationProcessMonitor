@@ -335,6 +335,7 @@
 			/>
 			<Tool
 				Name="VCPreLinkEventTool"
+				CommandLine=""
 			/>
 			<Tool
 				Name="VCLinkerTool"
