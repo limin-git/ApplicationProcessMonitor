@@ -39,7 +39,7 @@ void Configuration::parse_ini_file( const std::string& ini_file_name, SectionMap
 
     RegexHelper::regex_remove_all( s, boost::regex( comment_regex_str ) );                                  // remove any comment
     RegexHelper::regex_remove_all( s, boost::regex( "^[ \\t]*\\n" ) );                                      // remove empty lines
-    RegexHelper::regex_replace_all( s, boost::regex( "(?x) ^[ \\t]* ([^\\n]*?) [ \\t]*(?=\\n)" ), "$1" );   // remove leading/tailing spaces
+    RegexHelper::regex_remove_all( s, boost::regex( "(?x) ( ^[ \\t]+ | [ \\t]+$ )" ) );                     // remove leading/tailing spaces
 
     const char* section_regex_str =
         "(?x)"
@@ -82,15 +82,11 @@ void Configuration::parse_ini_file( const std::string& ini_file_name, SectionMap
 std::string& Configuration::get_configuration( const std::string& section, const std::string& key )
 {
     KeyValueMap& key_value_map = get_configuration( section );
+    KeyValueMap::iterator find_it = key_value_map.find( key );
 
-    if ( false == key_value_map.empty() )
+    if ( find_it != key_value_map.end() )
     {
-        KeyValueMap::iterator find_it = key_value_map.find( key );
-
-        if ( find_it != key_value_map.end() )
-        {
-            return find_it->second;
-        }
+        return find_it->second;
     }
 
     static std::string empty_string;
