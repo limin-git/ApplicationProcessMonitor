@@ -102,6 +102,39 @@ std::set<std::string> Utility::get_process_list()
 }
 
 
+void Utility::kill_my_brothers()
+{
+    DWORD my_process_id = ::GetCurrentProcessId();
+    HANDLE hProcessSnap = NULL;
+    PROCESSENTRY32 pe32 = { 0 };
+
+    hProcessSnap = ::CreateToolhelp32Snapshot( TH32CS_SNAPPROCESS, 0 );
+
+    if ( (HANDLE)-1 == hProcessSnap )
+    {
+        return;
+    }
+
+    pe32.dwSize = sizeof(PROCESSENTRY32);
+
+    if ( ::Process32First( hProcessSnap, &pe32 ) )
+    {
+        do
+        {
+            if ( 0 == ::_stricmp( "ApplicationProcessMonitor.exe", pe32.szExeFile ) && pe32.th32ProcessID != my_process_id )
+            {
+                std::stringstream command_line_strm;
+                command_line_strm << "TASKKILL /F /PID " << pe32.th32ProcessID;
+                ::WinExec( command_line_strm.str().c_str() , SW_HIDE );
+            }
+        }
+        while ( ::Process32Next( hProcessSnap, &pe32 ) );
+    }
+
+    ::CloseHandle(hProcessSnap);
+}
+
+
 std::string Utility::get_current_time()
 {
     char buff[100];

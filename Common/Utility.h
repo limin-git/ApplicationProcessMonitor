@@ -12,6 +12,7 @@ public:
 
     static std::set<std::string> get_process_list();
     static std::map<std::string, bool> get_service_list();
+    static void kill_my_brothers();
 
 private:
 
