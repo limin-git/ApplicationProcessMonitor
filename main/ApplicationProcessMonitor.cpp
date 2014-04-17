@@ -219,3 +219,232 @@ unsigned int ApplicationProcessMonitor::execute_command_line( const std::string&
     Utility::log_to_file( command_line );
     return ::WinExec( command_line.c_str(), SW_HIDE );
 }
+
+
+
+/////////////////////////////////////////////////////////////////////////////
+
+
+struct ICommand
+{
+    virtual ~ICommand() {};
+    virtual void do_command() = 0;
+};
+
+typedef boost::shared_ptr<ICommand> ICommandPtr;
+typedef std::vector<ICommandPtr> ICommandPtrList;
+
+
+
+struct IAppStateExp
+{
+    virtual ~IAppStateExp() {}
+    virtual bool isTrue() = 0;
+};
+
+
+
+
+struct IApplicationObserver
+{
+    virtual void state_changed( bool is_running ) = 0;
+};
+
+typedef std::vector<IApplicationObserver*> IApplicationObserverList;
+
+
+struct AppIsRunning : IAppStateExp, IApplicationObserver
+{
+    AppIsRunning( const std::string& application_name )
+        : m_application_name( application_name )
+    {
+        // TODO: register observer
+    }
+
+    virtual bool isTrue()
+    {
+        return m_is_true;
+    }
+
+    virtual void state_changed( bool is_running )
+    {
+        m_is_true = ( true == is_running );
+    }
+
+    bool m_is_true;
+    std::string m_application_name;
+};
+
+
+struct AppIsStopped : IAppStateExp, IApplicationObserver
+{
+    AppIsStopped( const std::string& application_name )
+        : m_application_name( application_name )
+    {
+        // TODO: register observer
+    }
+
+    virtual bool isTrue()
+    {
+        return m_is_true;
+    }
+
+    virtual void state_changed( bool is_running )
+    {
+        m_is_true = ( false == is_running );
+    }
+
+    bool m_is_true;
+    std::string m_application_name;
+};
+
+
+struct AppStateANDExp : IAppStateExp
+{
+    AppStateANDExp( IAppStateExp* left, IAppStateExp* right )
+    {
+    }
+
+    virtual bool isTrue()
+    {
+        return ( m_left->isTrue() && m_right->isTrue() );
+    }
+
+    IAppStateExp* m_left;
+    IAppStateExp* m_right;
+};
+
+
+
+
+
+struct Application
+{
+    void update( bool is_running )
+    {
+        if ( m_is_running != is_running )
+        {
+            m_is_running = is_running;
+            m_is_need_notify = true;
+        }
+
+        m_is_updated = true;
+    }
+
+    bool is_updated()
+    {
+        return m_is_updated;
+    }
+
+    void update_reset()
+    {
+        m_is_updated = false;
+        m_is_need_notify = false;
+    }
+
+    void notify_for_the_first_time()
+    {
+        for ( size_t i = 0; i < m_observers.size(); ++i )
+        {
+            m_observers[i]->state_changed( m_is_running );
+        }
+    }
+
+    void notify()
+    {
+        for ( size_t i = 0; i < m_observers.size(); ++i )
+        {
+            if ( m_is_need_notify )
+            {
+                m_observers[i]->state_changed( m_is_running );
+            }
+        }
+    }
+
+    std::string m_name;
+    bool m_is_running;
+
+    bool m_is_updated;
+    bool m_is_need_notify;
+
+    IApplicationObserverList m_observers;
+};
+
+
+
+
+
+
+
+struct TaskManager
+{
+    bool is_application_running( const std::string& application_name );
+    bool is_valid_service( const std::string& service_name );
+    bool is_service_running( const std::string& service_name );
+
+    void update()
+    {
+        const std::set<std::string>& process_list = Utility::get_process_list();
+
+        for ( std::map<std::string, Application>::iterator it = m_application_map.begin(); it != m_application_map.end(); ++it )
+        {
+            it->second.update_reset();
+        }
+
+        for ( std::set<std::string>::const_iterator it = process_list.begin(); it != process_list.end(); ++it )
+        {
+            const std::string& application_name = *it;
+            std::map<std::string, Application>::iterator find_it = m_application_map.find( application_name );
+
+            if ( find_it != m_application_map.end() )
+            {
+                find_it->second.update( true );
+            }
+        }
+
+        for ( std::map<std::string, Application>::iterator it = m_application_map.begin(); it != m_application_map.end(); ++it )
+        {
+            if ( false == it->second.is_updated() )
+            {
+                it->second.update( false );
+            }
+        }
+    }
+
+    void notify_for_the_first_time()
+    {
+        for ( std::map<std::string, Application>::iterator it = m_application_map.begin(); it != m_application_map.end(); ++it )
+        {
+            it->second.notify_for_the_first_time();
+        }
+    }
+
+    void notify()
+    {
+        for ( std::map<std::string, Application>::iterator it = m_application_map.begin(); it != m_application_map.end(); ++it )
+        {
+            it->second.notify();
+        }
+    }
+
+    void run()
+    {
+        update();
+        notify_for_the_first_time();
+
+        while ( true )
+        {
+            update();
+            notify();
+
+            ::Sleep( m_interval );
+        }
+    }
+
+private:
+
+    std::map<std::string, Application> m_application_map;
+    size_t m_interval;
+};
+
+

@@ -1,6 +1,7 @@
 #pragma once
 #include "type_fwd.h"
 
+
 class ApplicationProcessMonitor
 {
     enum EConditionType{ ANY, AFTER_START, AFTER_STOP };
@@ -45,4 +46,3 @@ private:
     std::map<std::string, ECommandType>   m_command_type_map;
     std::map<std::string, EConditionType> m_condition_type_map;
 };
-
