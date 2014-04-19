@@ -225,14 +225,6 @@ unsigned int ApplicationProcessMonitor::execute_command_line( const std::string&
 /////////////////////////////////////////////////////////////////////////////
 
 
-struct ICommand
-{
-    virtual ~ICommand() {};
-    virtual void do_command() = 0;
-};
-
-typedef boost::shared_ptr<ICommand> ICommandPtr;
-typedef std::vector<ICommandPtr> ICommandPtrList;
 
 
 
@@ -242,6 +234,7 @@ struct IAppStateExp
     virtual bool isTrue() = 0;
 };
 
+typedef boost::shared_ptr<IAppStateExp> IAppStateExpPtr;
 
 
 
@@ -251,6 +244,11 @@ struct IApplicationObserver
 };
 
 typedef std::vector<IApplicationObserver*> IApplicationObserverList;
+
+struct IApplicationSubject
+{
+    virtual void add_application_observer( IApplicationObserver* observer, const std::string& application_name ) = 0;
+};
 
 
 struct AppIsRunning : IAppStateExp, IApplicationObserver
@@ -299,9 +297,11 @@ struct AppIsStopped : IAppStateExp, IApplicationObserver
 };
 
 
-struct AppStateANDExp : IAppStateExp
+struct AppStateAndExp : IAppStateExp
 {
-    AppStateANDExp( IAppStateExp* left, IAppStateExp* right )
+    AppStateAndExp( IAppStateExp* left, IAppStateExp* right )
+        : m_left( left ),
+          m_right( right )
     {
     }
 
@@ -318,8 +318,97 @@ struct AppStateANDExp : IAppStateExp
 
 
 
+struct ConditionedCommand
+{
+    ConditionedCommand( const std::string& command, IAppStateExpPtr exp )
+        : m_command( command ),
+          m_exp( exp ),
+          m_is_error( false )
+    {
+    }
+
+    void do_command()
+    {
+        if ( false == m_is_error && true == m_exp->isTrue() )
+        {
+            UINT ret = ::WinExec( m_command.c_str(), SW_HIDE );
+
+            if ( ret <= 31 )
+            {
+                m_is_error = true;
+
+                if ( 0 == ret )
+                {
+                    std::cout << "failed to execute command line: " << m_command << ", reason: out of memory." << std::endl;
+                }
+                else if ( ERROR_BAD_FORMAT == ret )
+                {
+                    std::cout << "failed to execute command line: " << m_command << ", reason: The .exe file is invalid." << std::endl;
+                }
+                else if ( ERROR_FILE_NOT_FOUND == ret )
+                {
+                    std::cout << "failed to execute command line: " << m_command << ", reason: The specified file was not found." << std::endl;
+                }
+                else if ( ERROR_PATH_NOT_FOUND == ret )
+                {
+                    std::cout << "failed to execute command line: " << m_command << ", reason: The specified path was not found." << std::endl;
+                }
+            }
+        }
+    }
+
+    bool m_is_error;
+    std::string m_command;
+    IAppStateExpPtr m_exp;
+};
+
+typedef boost::shared_ptr<ConditionedCommand> ConditionedCommandPtr;
+typedef std::vector<ConditionedCommandPtr> ConditionedCommandPtrList;
+
+
+
+struct ITaskMgrObserver
+{
+    virtual void task_manager_begin() = 0;
+    virtual void task_manager_end() = 0;
+};
+
+
+
+
+
+
+struct ApplicationMonitor
+{
+    void add_command( ConditionedCommandPtr command )
+    {
+        m_commands.push_back( command );
+    }
+
+    virtual void task_manager_begin()
+    {
+    }
+
+    virtual void task_manager_end()
+    {
+        for ( size_t i = 0; i < m_commands.size(); ++i )
+        {
+            m_commands[i]->do_command();
+        }
+    }
+
+    ConditionedCommandPtrList m_commands;
+};
+
+
+
 struct Application
 {
+    void add_observer( IApplicationObserver* observer )
+    {
+        m_observers.push_back( observer );
+    }
+
     void update( bool is_running )
     {
         if ( m_is_running != is_running )
@@ -375,12 +464,23 @@ struct Application
 
 
 
-
-struct TaskManager
+struct TaskManager : IApplicationSubject
 {
-    bool is_application_running( const std::string& application_name );
-    bool is_valid_service( const std::string& service_name );
-    bool is_service_running( const std::string& service_name );
+    static TaskManager& instance()
+    {
+        static TaskManager m_instance;
+        return m_instance;
+    }
+
+    void add_observer( ITaskMgrObserver* observer )
+    {
+        m_observer = observer;
+    }
+
+    virtual void add_application_observer( IApplicationObserver* observer, const std::string& application_name )
+    {
+        m_application_map[application_name].add_observer( observer );
+    }
 
     void update()
     {
@@ -411,14 +511,6 @@ struct TaskManager
         }
     }
 
-    void notify_for_the_first_time()
-    {
-        for ( std::map<std::string, Application>::iterator it = m_application_map.begin(); it != m_application_map.end(); ++it )
-        {
-            it->second.notify_for_the_first_time();
-        }
-    }
-
     void notify()
     {
         for ( std::map<std::string, Application>::iterator it = m_application_map.begin(); it != m_application_map.end(); ++it )
@@ -429,13 +521,14 @@ struct TaskManager
 
     void run()
     {
-        update();
-        notify_for_the_first_time();
-
         while ( true )
         {
+            m_observer->task_manager_begin();
+
             update();
             notify();
+         
+            m_observer->task_manager_end();
 
             ::Sleep( m_interval );
         }
@@ -443,8 +536,9 @@ struct TaskManager
 
 private:
 
-    std::map<std::string, Application> m_application_map;
     size_t m_interval;
+    std::map<std::string, Application> m_application_map;
+    ITaskMgrObserver* m_observer;
 };
 
 
