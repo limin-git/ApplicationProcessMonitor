@@ -228,13 +228,13 @@ unsigned int ApplicationProcessMonitor::execute_command_line( const std::string&
 
 
 
-struct IAppStateExp
+struct IExpression
 {
-    virtual ~IAppStateExp() {}
+    virtual ~IExpression() {}
     virtual bool isTrue() = 0;
 };
 
-typedef boost::shared_ptr<IAppStateExp> IAppStateExpPtr;
+typedef boost::shared_ptr<IExpression> IExpressionPtr;
 
 
 
@@ -245,16 +245,12 @@ struct IApplicationObserver
 
 typedef std::vector<IApplicationObserver*> IApplicationObserverList;
 
-struct IApplicationSubject
-{
-    virtual void add_application_observer( IApplicationObserver* observer, const std::string& application_name ) = 0;
-};
 
-
-struct AppIsRunning : IAppStateExp, IApplicationObserver
+struct ApplicationIsRunning : IExpression, IApplicationObserver
 {
-    AppIsRunning( const std::string& application_name )
-        : m_application_name( application_name )
+    ApplicationIsRunning( const std::string& application_name )
+        : m_application_name( application_name ),
+          m_is_true( false )
     {
         // TODO: register observer
     }
@@ -274,10 +270,11 @@ struct AppIsRunning : IAppStateExp, IApplicationObserver
 };
 
 
-struct AppIsStopped : IAppStateExp, IApplicationObserver
+struct ApplicationIsStopped : IExpression, IApplicationObserver
 {
-    AppIsStopped( const std::string& application_name )
-        : m_application_name( application_name )
+    ApplicationIsStopped( const std::string& application_name )
+        : m_application_name( application_name ),
+          m_is_true( false )
     {
         // TODO: register observer
     }
@@ -297,9 +294,9 @@ struct AppIsStopped : IAppStateExp, IApplicationObserver
 };
 
 
-struct AppStateAndExp : IAppStateExp
+struct AndExpression : IExpression
 {
-    AppStateAndExp( IAppStateExp* left, IAppStateExp* right )
+    AndExpression( IExpressionPtr left, IExpressionPtr right )
         : m_left( left ),
           m_right( right )
     {
@@ -310,24 +307,31 @@ struct AppStateAndExp : IAppStateExp
         return ( m_left->isTrue() && m_right->isTrue() );
     }
 
-    IAppStateExp* m_left;
-    IAppStateExp* m_right;
+    IExpressionPtr m_left;
+    IExpressionPtr m_right;
 };
 
 
 
-
-
-struct ConditionedCommand
+struct ICommand
 {
-    ConditionedCommand( const std::string& command, IAppStateExpPtr exp )
+    virtual void do_command() = 0;
+};
+
+typedef boost::shared_ptr<ICommand> ICommandPtr;
+typedef std::vector<ICommandPtr> ICommandPtrList;
+
+
+struct ConditionedCommand : ICommand
+{
+    ConditionedCommand( const std::string& command, IExpressionPtr exp )
         : m_command( command ),
           m_exp( exp ),
           m_is_error( false )
     {
     }
 
-    void do_command()
+    virtual void do_command()
     {
         if ( false == m_is_error && true == m_exp->isTrue() )
         {
@@ -359,7 +363,7 @@ struct ConditionedCommand
 
     bool m_is_error;
     std::string m_command;
-    IAppStateExpPtr m_exp;
+    IExpressionPtr m_exp;
 };
 
 typedef boost::shared_ptr<ConditionedCommand> ConditionedCommandPtr;
@@ -375,14 +379,132 @@ struct ITaskMgrObserver
 
 
 
-
-
-
-struct ApplicationMonitor
+struct CommandFactory
 {
-    void add_command( ConditionedCommandPtr command )
+    static CommandFactory& instance()
     {
-        m_commands.push_back( command );
+        static CommandFactory m_instance;
+        return m_instance;
+    }
+
+
+    ICommandPtrList create_commands( const SectionMap& section_map )
+    {
+        ICommandPtrList commands;
+
+        std::map<std::string, std::string> m_command_map;
+        m_command_map[ "start" ] = "";
+        m_command_map[ "stop" ] = "TASKKILL /F /IM ";
+        m_command_map[ "start_service" ] = "SC START ";
+        m_command_map[ "stop_service" ] = "SC STOP ";
+
+        for ( SectionMap::const_iterator it = section_map.begin(); it != section_map.end(); ++it )
+        {
+            const std::string& application_name = it->first;
+            const KeyValueMap& configuration_map = it->second;
+
+            for ( KeyValueMap::const_iterator key_it = configuration_map.begin(); key_it != configuration_map.end(); ++key_it )
+            {
+                const std::string& condition_type = key_it->first;
+                const std::string& command_line = key_it->second;
+
+                boost::smatch m;
+                static const boost::regex configuration_regex( "(?x) ([\\w]+) \\s+ (.+)" );
+
+                if ( true == regex_match( command_line, m, configuration_regex ) )
+                {
+                    const std::string& command_type = m.str(1);
+                    const std::string& command = m.str(2);
+                    const std::string application_in_command = get_application_name_from_command_line( command );
+
+                    if ( "*" == application_name )
+                    {
+                        ICommandPtr command = create_command( m_command_map[command_type] + application_in_command, application_in_command, command_type != "start" );
+                        commands.push_back( command );
+                    }
+                    else
+                    {
+                        ICommandPtr command = create_command( m_command_map[command_type] + application_in_command, application_name, condition_type == "After Start", application_in_command, command_type != "start" );
+                        commands.push_back( command );
+                    }
+                }
+            }
+        }
+
+        return commands;        
+    }
+
+private:
+
+    CommandFactory() {}
+
+    ICommandPtr create_command( const std::string& command_line, const std::string& application_name, bool app_is_running )
+    {
+        IExpressionPtr app_state_expression;
+
+        if ( true == app_is_running )
+        {
+            app_state_expression.reset( new ApplicationIsRunning( application_name ) );
+        }
+        else
+        {
+            app_state_expression.reset( new ApplicationIsStopped( application_name ) );
+        }
+
+        return ICommandPtr( new ConditionedCommand( command_line, app_state_expression ) );
+    }
+
+    ICommandPtr create_command( const std::string& command_line, const std::string& application_name_1, bool app_is_running_1, const std::string& application_name_2, bool app_is_running_2 )
+    {
+        
+        IExpressionPtr app_state_expression_1;
+        IExpressionPtr app_state_expression_2;
+        IExpressionPtr app_state_expression( new AndExpression( app_state_expression_1, app_state_expression_2 ) );
+
+        if ( true == app_is_running_1 )
+        {
+            app_state_expression_1.reset( new ApplicationIsRunning( application_name_1 ) );
+        }
+        else
+        {
+            app_state_expression_1.reset( new ApplicationIsStopped( application_name_1 ) );
+        }
+
+        if ( true == app_is_running_2 )
+        {
+            app_state_expression_2.reset( new ApplicationIsRunning( application_name_2 ) );
+        }
+        else
+        {
+            app_state_expression_2.reset( new ApplicationIsStopped( application_name_2 ) );
+        }
+
+        return ICommandPtr( new ConditionedCommand( command_line, app_state_expression ) );
+    }
+
+    std::string get_application_name_from_command_line( const std::string& command_line )
+    {
+        boost::filesystem::path app_path( command_line );
+        std::string application_name = app_path.filename().string();
+        boost::replace_all( application_name, "\"", "" );
+        return application_name;
+    }
+};
+
+
+
+
+
+struct ApplicationMonitor : ITaskMgrObserver
+{
+    ApplicationMonitor()
+    {
+        add_commands( CommandFactory::instance().create_commands( Configuration::instance().get_configuration() ) );
+    }
+
+    void add_commands( ICommandPtrList commands )
+    {
+        m_commands.insert( m_commands.end(), commands.begin(), commands.end() );
     }
 
     virtual void task_manager_begin()
@@ -397,16 +519,25 @@ struct ApplicationMonitor
         }
     }
 
-    ConditionedCommandPtrList m_commands;
+    ICommandPtrList m_commands;
 };
 
 
 
 struct Application
 {
+    Application( const std::string& name )
+        : m_name( name ),
+          m_is_running( false ),
+          m_is_updated( false ),
+          m_is_state_changed( false )
+    {
+    }
+
     void add_observer( IApplicationObserver* observer )
     {
         m_observers.push_back( observer );
+        observer->state_changed( m_is_running );
     }
 
     void update( bool is_running )
@@ -414,7 +545,7 @@ struct Application
         if ( m_is_running != is_running )
         {
             m_is_running = is_running;
-            m_is_need_notify = true;
+            m_is_state_changed = true;
         }
 
         m_is_updated = true;
@@ -428,22 +559,14 @@ struct Application
     void update_reset()
     {
         m_is_updated = false;
-        m_is_need_notify = false;
-    }
-
-    void notify_for_the_first_time()
-    {
-        for ( size_t i = 0; i < m_observers.size(); ++i )
-        {
-            m_observers[i]->state_changed( m_is_running );
-        }
+        m_is_state_changed = false;
     }
 
     void notify()
     {
         for ( size_t i = 0; i < m_observers.size(); ++i )
         {
-            if ( m_is_need_notify )
+            if ( true == m_is_state_changed )
             {
                 m_observers[i]->state_changed( m_is_running );
             }
@@ -454,22 +577,28 @@ struct Application
     bool m_is_running;
 
     bool m_is_updated;
-    bool m_is_need_notify;
+    bool m_is_state_changed;
 
     IApplicationObserverList m_observers;
 };
 
+typedef boost::shared_ptr<Application> ApplicationPtr;
 
 
 
 
 
-struct TaskManager : IApplicationSubject
+struct TaskManager
 {
     static TaskManager& instance()
     {
         static TaskManager m_instance;
         return m_instance;
+    }
+
+    void set_interval( size_t interval )
+    {
+        m_interval = interval;
     }
 
     void add_observer( ITaskMgrObserver* observer )
@@ -479,43 +608,43 @@ struct TaskManager : IApplicationSubject
 
     virtual void add_application_observer( IApplicationObserver* observer, const std::string& application_name )
     {
-        m_application_map[application_name].add_observer( observer );
+        m_application_map[application_name]->add_observer( observer );
     }
 
     void update()
     {
         const std::set<std::string>& process_list = Utility::get_process_list();
 
-        for ( std::map<std::string, Application>::iterator it = m_application_map.begin(); it != m_application_map.end(); ++it )
+        for ( std::map<std::string, ApplicationPtr>::iterator it = m_application_map.begin(); it != m_application_map.end(); ++it )
         {
-            it->second.update_reset();
+            it->second->update_reset();
         }
 
         for ( std::set<std::string>::const_iterator it = process_list.begin(); it != process_list.end(); ++it )
         {
             const std::string& application_name = *it;
-            std::map<std::string, Application>::iterator find_it = m_application_map.find( application_name );
+            std::map<std::string, ApplicationPtr>::iterator find_it = m_application_map.find( application_name );
 
             if ( find_it != m_application_map.end() )
             {
-                find_it->second.update( true );
+                find_it->second->update( true );
             }
         }
 
-        for ( std::map<std::string, Application>::iterator it = m_application_map.begin(); it != m_application_map.end(); ++it )
+        for ( std::map<std::string, ApplicationPtr>::iterator it = m_application_map.begin(); it != m_application_map.end(); ++it )
         {
-            if ( false == it->second.is_updated() )
+            if ( false == it->second->is_updated() )
             {
-                it->second.update( false );
+                it->second->update( false );
             }
         }
     }
 
     void notify()
     {
-        for ( std::map<std::string, Application>::iterator it = m_application_map.begin(); it != m_application_map.end(); ++it )
+        for ( std::map<std::string, ApplicationPtr>::iterator it = m_application_map.begin(); it != m_application_map.end(); ++it )
         {
-            it->second.notify();
+            it->second->notify();
         }
     }
 
@@ -537,8 +666,18 @@ struct TaskManager : IApplicationSubject
 private:
 
     size_t m_interval;
-    std::map<std::string, Application> m_application_map;
+    std::map<std::string, ApplicationPtr> m_application_map;
     ITaskMgrObserver* m_observer;
 };
+
+
+
+void my_main()
+{
+    ApplicationMonitor application_monitor;
+    TaskManager::instance().add_observer( &application_monitor );
+    TaskManager::instance().run();
+}
+
 
 
