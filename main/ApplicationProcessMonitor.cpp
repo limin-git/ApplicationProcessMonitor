@@ -222,10 +222,190 @@ unsigned int ApplicationProcessMonitor::execute_command_line( const std::string&
 
 
 
-/////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////
 
 
+struct IApplicationObserver
+{
+    virtual void state_changed( bool is_running ) = 0;
+};
 
+typedef std::vector<IApplicationObserver*> IApplicationObserverList;
+
+
+struct ITaskMgrObserver
+{
+    virtual void task_manager_begin() = 0;
+    virtual void task_manager_end() = 0;
+};
+
+
+struct TaskManager
+{
+    struct Application
+    {
+        Application( const std::string& name )
+            : m_name( name ),
+              m_is_running( false ),
+              m_is_updated( false ),
+              m_is_state_changed( false )
+        {
+        }
+
+        void add_observer( IApplicationObserver* observer )
+        {
+            m_observers.push_back( observer );
+            observer->state_changed( m_is_running );
+        }
+
+        void update( bool is_running )
+        {
+            if ( m_is_running != is_running )
+            {
+                m_is_running = is_running;
+                m_is_state_changed = true;
+            }
+
+            m_is_updated = true;
+        }
+
+        bool is_updated()
+        {
+            return m_is_updated;
+        }
+
+        void update_reset()
+        {
+            m_is_updated = false;
+            m_is_state_changed = false;
+        }
+
+        void notify()
+        {
+            if ( true == m_is_state_changed )
+            {
+                for ( size_t i = 0; i < m_observers.size(); ++i )
+                {
+                    m_observers[i]->state_changed( m_is_running );
+                }
+
+                m_is_state_changed = false;
+            }
+        }
+
+        std::string m_name;
+        bool m_is_running;
+
+        bool m_is_updated;
+        bool m_is_state_changed;
+
+        IApplicationObserverList m_observers;
+    };
+
+    typedef boost::shared_ptr<Application> ApplicationPtr;
+
+
+    static TaskManager& instance()
+    {
+        static TaskManager m_instance;
+        return m_instance;
+    }
+
+    void set_interval( size_t interval )
+    {
+        m_interval = interval;
+    }
+
+    void set_observer( ITaskMgrObserver* observer )
+    {
+        m_observer = observer;
+    }
+
+    virtual void add_application_observer( IApplicationObserver* observer, const std::string& application_name )
+    {
+        std::map<std::string, ApplicationPtr>::iterator find_it = m_application_map.find( application_name );
+
+        if ( find_it != m_application_map.end() )
+        {
+            find_it->second->add_observer( observer );
+            return;
+        }
+        else
+        {
+            ApplicationPtr application( new Application(application_name)  );
+            application->add_observer( observer );
+            m_application_map.insert( std::make_pair(application_name, application) );
+        }
+    }
+
+    void update()
+    {
+        const std::set<std::string>& process_list = Utility::get_process_list();
+
+        for ( std::map<std::string, ApplicationPtr>::iterator it = m_application_map.begin(); it != m_application_map.end(); ++it )
+        {
+            it->second->update_reset();
+        }
+
+        for ( std::set<std::string>::const_iterator it = process_list.begin(); it != process_list.end(); ++it )
+        {
+            const std::string& application_name = *it;
+            std::map<std::string, ApplicationPtr>::iterator find_it = m_application_map.find( application_name );
+
+            if ( find_it != m_application_map.end() )
+            {
+                find_it->second->update( true );
+            }
+        }
+
+        for ( std::map<std::string, ApplicationPtr>::iterator it = m_application_map.begin(); it != m_application_map.end(); ++it )
+        {
+            if ( false == it->second->is_updated() )
+            {
+                it->second->update( false );
+            }
+        }
+    }
+
+    void notify()
+    {
+        for ( std::map<std::string, ApplicationPtr>::iterator it = m_application_map.begin(); it != m_application_map.end(); ++it )
+        {
+            it->second->notify();
+        }
+    }
+
+    void run()
+    {
+        assert( m_observer != NULL );
+
+        while ( true )
+        {
+            m_observer->task_manager_begin();
+            update();
+            notify();
+            m_observer->task_manager_end();
+
+            ::Sleep( m_interval );
+        }
+    }
+
+private:
+
+    TaskManager()
+        : m_observer( NULL ),
+          m_interval( 1000 )
+    {
+    }
+
+private:
+
+    size_t m_interval;
+    ITaskMgrObserver* m_observer;
+    std::map<std::string, ApplicationPtr> m_application_map;
+};
 
 
 struct IExpression
@@ -237,22 +417,13 @@ struct IExpression
 typedef boost::shared_ptr<IExpression> IExpressionPtr;
 
 
-
-struct IApplicationObserver
-{
-    virtual void state_changed( bool is_running ) = 0;
-};
-
-typedef std::vector<IApplicationObserver*> IApplicationObserverList;
-
-
 struct ApplicationIsRunning : IExpression, IApplicationObserver
 {
     ApplicationIsRunning( const std::string& application_name )
         : m_application_name( application_name ),
           m_is_true( false )
     {
-        // TODO: register observer
+        TaskManager::instance().add_application_observer( this, m_application_name );
     }
 
     virtual bool isTrue()
@@ -276,7 +447,7 @@ struct ApplicationIsStopped : IExpression, IApplicationObserver
         : m_application_name( application_name ),
           m_is_true( false )
     {
-        // TODO: register observer
+        TaskManager::instance().add_application_observer( this, m_application_name );
     }
 
     virtual bool isTrue()
@@ -312,7 +483,6 @@ struct AndExpression : IExpression
 };
 
 
-
 struct ICommand
 {
     virtual void do_command() = 0;
@@ -324,16 +494,16 @@ typedef std::vector<ICommandPtr> ICommandPtrList;
 
 struct ConditionedCommand : ICommand
 {
-    ConditionedCommand( const std::string& command, IExpressionPtr exp )
+    ConditionedCommand( const std::string& command, IExpressionPtr expression )
         : m_command( command ),
-          m_exp( exp ),
+          m_expression( expression ),
           m_is_error( false )
     {
     }
 
     virtual void do_command()
     {
-        if ( false == m_is_error && true == m_exp->isTrue() )
+        if ( false == m_is_error && true == m_expression->isTrue() )
         {
             UINT ret = ::WinExec( m_command.c_str(), SW_HIDE );
 
@@ -363,20 +533,11 @@ struct ConditionedCommand : ICommand
 
     bool m_is_error;
     std::string m_command;
-    IExpressionPtr m_exp;
+    IExpressionPtr m_expression;
 };
 
 typedef boost::shared_ptr<ConditionedCommand> ConditionedCommandPtr;
 typedef std::vector<ConditionedCommandPtr> ConditionedCommandPtrList;
-
-
-
-struct ITaskMgrObserver
-{
-    virtual void task_manager_begin() = 0;
-    virtual void task_manager_end() = 0;
-};
-
 
 
 struct CommandFactory
@@ -386,7 +547,6 @@ struct CommandFactory
         static CommandFactory m_instance;
         return m_instance;
     }
-
 
     ICommandPtrList create_commands( const SectionMap& section_map )
     {
@@ -456,7 +616,6 @@ private:
 
     ICommandPtr create_command( const std::string& command_line, const std::string& application_name_1, bool app_is_running_1, const std::string& application_name_2, bool app_is_running_2 )
     {
-        
         IExpressionPtr app_state_expression_1;
         IExpressionPtr app_state_expression_2;
         IExpressionPtr app_state_expression( new AndExpression( app_state_expression_1, app_state_expression_2 ) );
@@ -492,14 +651,16 @@ private:
 };
 
 
-
-
-
 struct ApplicationMonitor : ITaskMgrObserver
 {
     ApplicationMonitor()
     {
-        add_commands( CommandFactory::instance().create_commands( Configuration::instance().get_configuration() ) );
+        std::string interval = Configuration::instance().get_configuration( CONFIG_SECTION_OPTION, CONFIG_KEY_INTERVAL_IN_SECONDS );
+        TaskManager::instance().set_interval( boost::lexical_cast<size_t>(interval) * 1000 );
+        SectionMap& section_map = Configuration::instance().get_configuration();
+        section_map.erase( CONFIG_SECTION_OPTION );
+        add_commands( CommandFactory::instance().create_commands( section_map ) );
+        TaskManager::instance().set_observer( this );
     }
 
     void add_commands( ICommandPtrList commands )
@@ -523,161 +684,9 @@ struct ApplicationMonitor : ITaskMgrObserver
 };
 
 
-
-struct Application
-{
-    Application( const std::string& name )
-        : m_name( name ),
-          m_is_running( false ),
-          m_is_updated( false ),
-          m_is_state_changed( false )
-    {
-    }
-
-    void add_observer( IApplicationObserver* observer )
-    {
-        m_observers.push_back( observer );
-        observer->state_changed( m_is_running );
-    }
-
-    void update( bool is_running )
-    {
-        if ( m_is_running != is_running )
-        {
-            m_is_running = is_running;
-            m_is_state_changed = true;
-        }
-
-        m_is_updated = true;
-    }
-
-    bool is_updated()
-    {
-        return m_is_updated;
-    }
-
-    void update_reset()
-    {
-        m_is_updated = false;
-        m_is_state_changed = false;
-    }
-
-    void notify()
-    {
-        for ( size_t i = 0; i < m_observers.size(); ++i )
-        {
-            if ( true == m_is_state_changed )
-            {
-                m_observers[i]->state_changed( m_is_running );
-            }
-        }
-    }
-
-    std::string m_name;
-    bool m_is_running;
-
-    bool m_is_updated;
-    bool m_is_state_changed;
-
-    IApplicationObserverList m_observers;
-};
-
-typedef boost::shared_ptr<Application> ApplicationPtr;
-
-
-
-
-
-struct TaskManager
-{
-    static TaskManager& instance()
-    {
-        static TaskManager m_instance;
-        return m_instance;
-    }
-
-    void set_interval( size_t interval )
-    {
-        m_interval = interval;
-    }
-
-    void add_observer( ITaskMgrObserver* observer )
-    {
-        m_observer = observer;
-    }
-
-    virtual void add_application_observer( IApplicationObserver* observer, const std::string& application_name )
-    {
-        m_application_map[application_name]->add_observer( observer );
-    }
-
-    void update()
-    {
-        const std::set<std::string>& process_list = Utility::get_process_list();
-
-        for ( std::map<std::string, ApplicationPtr>::iterator it = m_application_map.begin(); it != m_application_map.end(); ++it )
-        {
-            it->second->update_reset();
-        }
-
-        for ( std::set<std::string>::const_iterator it = process_list.begin(); it != process_list.end(); ++it )
-        {
-            const std::string& application_name = *it;
-            std::map<std::string, ApplicationPtr>::iterator find_it = m_application_map.find( application_name );
-
-            if ( find_it != m_application_map.end() )
-            {
-                find_it->second->update( true );
-            }
-        }
-
-        for ( std::map<std::string, ApplicationPtr>::iterator it = m_application_map.begin(); it != m_application_map.end(); ++it )
-        {
-            if ( false == it->second->is_updated() )
-            {
-                it->second->update( false );
-            }
-        }
-    }
-
-    void notify()
-    {
-        for ( std::map<std::string, ApplicationPtr>::iterator it = m_application_map.begin(); it != m_application_map.end(); ++it )
-        {
-            it->second->notify();
-        }
-    }
-
-    void run()
-    {
-        while ( true )
-        {
-            m_observer->task_manager_begin();
-
-            update();
-            notify();
-         
-            m_observer->task_manager_end();
-
-            ::Sleep( m_interval );
-        }
-    }
-
-private:
-
-    size_t m_interval;
-    std::map<std::string, ApplicationPtr> m_application_map;
-    ITaskMgrObserver* m_observer;
-};
-
-
-
 void my_main()
 {
     ApplicationMonitor application_monitor;
-    TaskManager::instance().add_observer( &application_monitor );
+    TaskManager::instance().set_interval( 1000 );
     TaskManager::instance().run();
 }
-
-
-

@@ -1,22 +1,5 @@
 #pragma once
-#include <boost/regex_fwd.hpp>
-#include <boost/unordered/unordered_map_fwd.hpp>
-#include <boost/unordered/unordered_set_fwd.hpp>
-
-namespace boost
-{
-    template< class T >
-    class shared_ptr;
-}
-
-#include <vector>
-#include <string>
-#include <set>
-#include <map>
-#include <iosfwd>
-
 ////////////////////////[ Macros ]//////////////////////////////////////////////////
-
 typedef std::multimap< std::string, std::string > KeyValueMap;
 typedef std::string Section;
 typedef std::map< Section, KeyValueMap > SectionMap;
